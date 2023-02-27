@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, ChannelType } = require('discord.js');
+const { SlashCommandBuilder } = require('discord.js');
 const { joinVoiceChannel, createAudioPlayer, NoSubscriberBehavior, EndBehaviorType, createAudioResource, StreamType } = require('@discordjs/voice');
 const AudioMixer = require('audio-mixer');
 const Prism = require('prism-media');
@@ -6,82 +6,41 @@ const { PassThrough } = require('stream');
 
 module.exports = {
 	data: new SlashCommandBuilder()
-        // コマンドの名前
 		.setName('stream')
-        // コマンドの説明文
 		.setDescription('VCを中継。')
-		// コマンドのオプションを追加
-		.addChannelOption((option) =>
-			option
-				.setName('channel1')
-				.setDescription('The channel that Listener-bot join')
-				.setRequired(true)
-				.addChannelTypes(ChannelType.GuildVoice),
-		)
-		.addStringOption((option) =>
-			option
-				.setName('channel2')
-				.setDescription('The channel that Speaker-bot join')
-				.setAutocomplete(true)
-				.setRequired(true),
-		),
-	async autocomplete(interaction) {
-		const focusedValue = interaction.options.getFocused();
-		const vc = interaction.options.get('channel1');
-		const chats = interaction.guild.channels.cache;
-		const voiceChannels = chats.filter(file => file.type === 2);
-		let unSelectedVoiceChannels = [];
+	,
+	async execute(interaction, clients) {
 
-		for (const voiceChannel of voiceChannels) {
-			if (voiceChannel[0] !== vc.value) {
-				unSelectedVoiceChannels.push(voiceChannel);
+		let connections = [];
+		let voiceChannels = [];
+		let len = clients.length;
+
+		for (let i = 0; i < len; i++) {
+			if (eval(`process.env.BOT${ i }_VC_ID`)){
+				voiceChannels[i] = eval(`process.env.BOT${ i }_VC_ID`);
+			}
+			else {
+				break;
 			}
 		}
-		
-		const filtered = unSelectedVoiceChannels.filter(unSelectedVoiceChannel => unSelectedVoiceChannel[1].name.startsWith(focusedValue));
 
-		await interaction.respond(
-			
-			filtered.map(unSelectedVoiceChannel => ({ name: unSelectedVoiceChannel[1].name, value: unSelectedVoiceChannel[1].id })).slice(0, 25)
-		);
-	},
-	async execute(interaction, client1, client2) {
-		const voiceChannel1 = interaction.options.getChannel('channel1');
-		const voiceChannel2 = interaction.options.getString('channel2');
-		if (voiceChannel1 && voiceChannel2) {
-			if (voiceChannel1 === voiceChannel2) {
-				await interaction.reply('同じVCには参加できません🥺');
-				return;
-			}
-			// Listener-botがVCに参加する処理
-			const connection1 = joinVoiceChannel({
-				// なぜかはわからないが、groupの指定をしないと、先にVCに入っているBOTがVCを移動するだけになってしまうので、記述。
-				group: 'listener',
+		const mixer = new AudioMixer.Mixer({
+			channels: 2,
+			bitDepth: 16,
+			sampleRate: 48000,
+			clearInterval: 250,
+		});
+
+		for (let i = 0; i < len; i++) {
+			connections[i] = joinVoiceChannel({
+				group: `${ i }`,
 				guildId: interaction.guildId,
-				channelId: voiceChannel1.id,
-				// どっちのBOTを動かしてあげるかの指定をしてあげる。
-				adapterCreator: client1.guilds.cache.get(interaction.guildId).voiceAdapterCreator,
-				// VC参加時にマイクミュート、スピーカーミュートにするか否か
-				selfMute: true,
+				channelId: voiceChannels[i].id,
+				adapterCreator: clients[i].guilds.cache.get(interaction.guildId).voiceAdapterCreator,
+				selfMute: false,
 				selfDeaf: false,
 			});
-			// Speaker-botがVCに参加する処理
-			const connection2 = joinVoiceChannel({
-				group: 'speaker',
-				guildId: interaction.guildId,
-				channelId: voiceChannel2,
-				adapterCreator: client2.guilds.cache.get(interaction.guildId).voiceAdapterCreator,
-				selfMute: false,
-				selfDeaf: true,
-			});
-			const mixer = new AudioMixer.Mixer({
-				channels: 2,
-				bitDepth: 16,
-				sampleRate: 48000,
-				clearInterval: 250,
-			});
-			// Listener-botが参加しているVCで誰かが話し出したら実行
-			connection1.receiver.speaking.on('start', (userId) => {
+			connections[i].receiver.speaking.on('start', (userId) => {
 				const standaloneInput = new AudioMixer.Input({
 					channels: 2,
 					bitDepth: 16,
@@ -90,12 +49,9 @@ module.exports = {
 				});
 				const audioMixer = mixer;
 				audioMixer.addInput(standaloneInput);
-				// VCの音声取得機能
-				const audio = connection1.receiver.subscribe(userId, {
+				const audio = connections[i].receiver.subscribe(userId, {
 					end: {
 						behavior: EndBehaviorType.AfterSilence,
-						// Opusの場合、100msだと短過ぎるのか、エラー落ちするため1000msに設定
-						// Rawに変換する場合、1000msだと長過ぎるのか、エラー落ちするため100msに設定
 						duration: 100,
 					},
 				});
@@ -104,16 +60,13 @@ module.exports = {
 					.pipe(new Prism.opus.Decoder({ rate: 48000, channels: 2, frameSize: 960 }))
 					.pipe(rawStream);
 				const p = rawStream.pipe(standaloneInput);
-				// 音声をVCに流す機能
 				const player = createAudioPlayer({
 					behaviors: {
-						// 聞いている人がいなくても音声を中継してくれるように設定
 						noSubscriber: NoSubscriberBehavior.play,
 					},
 				});
 				const resource = createAudioResource(mixer,
 					{
-						// VCから取得してきた音声はOpus型なので、Opusに設定
 						inputType: StreamType.Raw,
 					},
 				);
@@ -128,11 +81,8 @@ module.exports = {
 					}
 				});
 			});
-			await interaction.reply('VCを中継します！');
-			return [connection1, connection2];
 		}
-		else {
-			await interaction.reply('BOTを参加させるVCを指定してください！');
-		}
+		await interaction.reply('VCを中継します！');
+		return [connections];
 	},
 };
