@@ -41,46 +41,52 @@ module.exports = {
 				selfDeaf: false,
 			});
 			connections[i].receiver.speaking.on('start', (userId) => {
-				console.log(clients[0].guilds.cache.get(userId).username);
-				const standaloneInput = new AudioMixer.Input({
-					channels: 2,
-					bitDepth: 16,
-					sampleRate: 48000,
-					volume: 100,
-				});
-				const audioMixer = mixer;
-				audioMixer.addInput(standaloneInput);
-				const audio = connections[i].receiver.subscribe(userId, {
-					end: {
-						behavior: EndBehaviorType.AfterSilence,
-						duration: 100,
-					},
-				});
-				const rawStream = new PassThrough();
-				audio
-					.pipe(new Prism.opus.Decoder({ rate: 48000, channels: 2, frameSize: 960 }))
-					.pipe(rawStream);
-				const p = rawStream.pipe(standaloneInput);
-				const player = createAudioPlayer({
-					behaviors: {
-						noSubscriber: NoSubscriberBehavior.play,
-					},
-				});
-				const resource = createAudioResource(mixer,
-					{
-						inputType: StreamType.Raw,
-					},
-				);
-				player.play(resource);
-				connections[1].subscribe(player);
-				rawStream.on('end', () => {
-					if (this.audioMixer != null) {
-						this.audioMixer.removeInput(standaloneInput);
-						standaloneInput.destroy();
-						rawStream.destroy();
-						p.destroy();
-					}
-				});
+				let member = interaction.guild.members.cache.get(userId);
+				console.log(member);
+				if (member.roles.cache.has(process.env.LEADER)) {
+					const standaloneInput = new AudioMixer.Input({
+						channels: 2,
+						bitDepth: 16,
+						sampleRate: 48000,
+						volume: 100,
+					});
+					const audioMixer = mixer;
+					audioMixer.addInput(standaloneInput);
+					const audio = connections[i].receiver.subscribe(userId, {
+						end: {
+							behavior: EndBehaviorType.AfterSilence,
+							duration: 100,
+						},
+					});
+					const rawStream = new PassThrough();
+					audio
+						.pipe(new Prism.opus.Decoder({ rate: 48000, channels: 2, frameSize: 960 }))
+						.pipe(rawStream);
+					const p = rawStream.pipe(standaloneInput);
+					const player = createAudioPlayer({
+						behaviors: {
+							noSubscriber: NoSubscriberBehavior.play,
+						},
+					});
+					const resource = createAudioResource(mixer,
+						{
+							inputType: StreamType.Raw,
+						},
+					);
+					player.play(resource);
+					connections[1].subscribe(player);
+					rawStream.on('end', () => {
+						if (this.audioMixer != null) {
+							this.audioMixer.removeInput(standaloneInput);
+							standaloneInput.destroy();
+							rawStream.destroy();
+							p.destroy();
+						}
+					});
+				}
+				else {
+					return;
+				}
 			});
 		}
 		await interaction.reply('VCを中継します！');
