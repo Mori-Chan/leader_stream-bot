@@ -16,8 +16,8 @@ module.exports = {
 		let len = clients.length;
 
 		for (let i = 0; i < len; i++) {
-			if (eval(`process.env.BOT${ i }_VC_ID`)){
-				voiceChannels[i] = eval(`process.env.BOT${ i }_VC_ID`);
+			if (eval(`process.env.BOT${ i + 1 }_VC_ID`)){
+				voiceChannels[i] = eval(`process.env.BOT${ i + 1 }_VC_ID`);
 			}
 			else {
 				break;
@@ -33,14 +33,15 @@ module.exports = {
 
 		for (let i = 0; i < len; i++) {
 			connections[i] = joinVoiceChannel({
-				group: `${ i }`,
+				group: `BOT ${ i }`,
 				guildId: interaction.guildId,
-				channelId: voiceChannels[i].id,
+				channelId: voiceChannels[i],
 				adapterCreator: clients[i].guilds.cache.get(interaction.guildId).voiceAdapterCreator,
 				selfMute: false,
 				selfDeaf: false,
 			});
 			connections[i].receiver.speaking.on('start', (userId) => {
+				console.log(clients[0].guilds.cache.get(userId).username);
 				const standaloneInput = new AudioMixer.Input({
 					channels: 2,
 					bitDepth: 16,
@@ -71,7 +72,7 @@ module.exports = {
 					},
 				);
 				player.play(resource);
-				connection2.subscribe(player);
+				connections[1].subscribe(player);
 				rawStream.on('end', () => {
 					if (this.audioMixer != null) {
 						this.audioMixer.removeInput(standaloneInput);

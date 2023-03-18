@@ -6,14 +6,14 @@ const { Client, Collection, Events, GatewayIntentBits } = require('discord.js');
 let clients = [];
 
 for (let i = 0; i < 100; i++) {
-    if (eval(`process.env.BOT${ i }_TOKEN`)){
+    if (eval(`process.env.BOT${ i + 1 }_TOKEN`)){
         clients[i] = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates] });
 
         clients[i].once(Events.ClientReady, c => {
             console.log(`Ready! Logged in as ${c.user.tag}`);
         });
 
-        clients[i].login(eval(`process.env.BOT${ i }_TOKEN`));
+        clients[i].login(eval(`process.env.BOT${ i + 1 }_TOKEN`));
     }
     else {
         break;
@@ -41,7 +41,7 @@ clients[0].on(Events.InteractionCreate, async interaction => {
     // コマンドでなかった場合は処理せずさよなら。
 	if (!interaction.isChatInputCommand()) return;
 
-	const command = interaction.clients[0].commands.get(interaction.commandName);
+	const command = interaction.client.commands.get(interaction.commandName);
 
     // 一致するコマンドがなかった場合
 	if (!command) {
